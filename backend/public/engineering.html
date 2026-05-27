@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAG Engineering Handover</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --orange: #E8621A;
+    --black: #0E0E0E;
+    --grey-1: #1A1A1A;
+    --grey-3: #4A4A4A;
+    --grey-4: #8A8A8A;
+    --grey-5: #D4D4D4;
+    --grey-6: #F4F4F4;
+    --white: #FFFFFF;
+    --font: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  }
+  body {
+    font-family: var(--font);
+    background: var(--grey-6);
+    color: var(--black);
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+  .page {
+    max-width: 920px;
+    margin: 0 auto;
+    background: var(--white);
+  }
+  .doc-header {
+    background: var(--black);
+    color: var(--white);
+    padding: 32px 40px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .brand-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    color: var(--orange);
+  }
+  .brand-sub, .doc-type {
+    font-size: 11px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--grey-4);
+  }
+  .doc-meta { text-align: right; }
+  .doc-ref { font-size: 14px; font-weight: 600; margin-top: 4px; }
+  .rule { height: 3px; background: var(--orange); }
+  .card {
+    padding: 28px 40px;
+    border-bottom: 1px solid var(--grey-5);
+  }
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 16px;
+  }
+  .hero {
+    display: flex;
+    justify-content: space-between;
+    gap: 24px;
+  }
+  .hero-title { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+  .hero-sub { margin-top: 5px; color: var(--grey-3); font-size: 14px; }
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 6px 10px;
+    background: var(--orange);
+    color: var(--white);
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 2px;
+    white-space: nowrap;
+  }
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+    gap: 16px 24px;
+  }
+  .kv { display: flex; flex-direction: column; gap: 4px; }
+  .kv-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--grey-4);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+  }
+  .kv-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--black);
+    overflow-wrap: anywhere;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--grey-4);
+    padding: 0 12px 10px 0;
+    border-bottom: 1px solid var(--grey-5);
+  }
+  td {
+    font-size: 14px;
+    padding: 12px 12px 12px 0;
+    border-bottom: 1px solid var(--grey-6);
+    vertical-align: top;
+  }
+  tr:last-child td { border-bottom: none; }
+  .mono {
+    font-family: "SF Mono", Consolas, monospace;
+    font-size: 13px;
+    font-weight: 600;
+  }
+  .note-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+  .note {
+    display: grid;
+    grid-template-columns: 8px 1fr;
+    gap: 12px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  .dot {
+    width: 6px;
+    height: 6px;
+    border-radius: 99px;
+    background: var(--orange);
+    margin-top: 7px;
+  }
+  .state {
+    padding: 64px 40px;
+    text-align: center;
+    color: var(--grey-3);
+  }
+  .state-title { font-weight: 700; margin-bottom: 8px; }
+  .state-sub { color: var(--grey-4); font-size: 13px; }
+  .footer {
+    background: var(--black);
+    color: var(--grey-4);
+    padding: 16px 40px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+  @media print {
+    body { background: white; padding: 0; }
+    .footer { display: none; }
+  }
+</style>
+</head>
+<body>
+<main class="page">
+  <header class="doc-header">
+    <div>
+      <div class="brand-name">TAG</div>
+      <div class="brand-sub">Engineering Handover</div>
+    </div>
+    <div class="doc-meta">
+      <div class="doc-type">Approved Order Package</div>
+      <div id="doc-ref" class="doc-ref">Loading...</div>
+    </div>
+  </header>
+  <div class="rule"></div>
+  <section id="content" class="state">
+    <div class="state-title">Generating engineering handover</div>
+    <div class="state-sub">Calling TAG Agent API...</div>
+  </section>
+  <footer class="footer">
+    <span>TAG Vehicle Systems - Confidential</span>
+    <span id="footer-right"></span>
+  </footer>
+</main>
+
+<script>
+async function load() {
+  const params = new URLSearchParams(location.search);
+  const orderId = params.get("order") || "ORD-2026-POC";
+
+  try {
+    const orderRes = await fetch("/api/orders/" + encodeURIComponent(orderId));
+    if (!orderRes.ok) throw new Error("Order " + orderId + " not found");
+    const orderData = await orderRes.json();
+    const optionIds = (orderData.configuration || []).map((row) => row.id);
+
+    const agentRes = await fetch("/api/agent", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        mode: "generate_engineering_output",
+        order_id: orderId,
+        vehicle_model_id: orderData.order.vehicle_model_id,
+        configuration_option_ids: optionIds,
+        qty: orderData.order.qty
+      })
+    });
+    if (!agentRes.ok) throw new Error("Agent failed with HTTP " + agentRes.status);
+
+    const agentData = await agentRes.json();
+    render(agentData.result.engineering_package, orderData.order);
+  } catch (err) {
+    document.getElementById("content").className = "state";
+    document.getElementById("content").innerHTML = `
+      <div class="state-title">Could not generate handover</div>
+      <div class="state-sub">${esc(err.message)}</div>
+    `;
+  }
+}
+
+function render(pkg, order) {
+  document.getElementById("doc-ref").textContent = "ENG / " + pkg.order_id;
+  document.getElementById("footer-right").textContent =
+    "Order " + pkg.order_id + " · " + (order.client_name || "");
+
+  const cfgRows = rows(pkg.configuration_requirements, (item) => `
+    <tr>
+      <td class="mono">${esc(item.option_id)}</td>
+      <td>${esc(item.category)}</td>
+      <td><strong>${esc(item.option_name)}</strong><br><span style="color:#4A4A4A">${esc(item.engineering_note)}</span></td>
+    </tr>
+  `);
+
+  const compliance = notes(pkg.compliance_requirements, (item) =>
+    `<strong>${esc(item.source)}:</strong> ${esc(item.requirement)}`
+  );
+
+  const buildNotes = notes(pkg.custom_build_notes, (item) => esc(item));
+  const context = notes(pkg.build_context_references, (item) => esc(item));
+  const questions = notes(pkg.open_questions, (item) => esc(item), "No open questions recorded.");
+
+  document.getElementById("content").className = "";
+  document.getElementById("content").innerHTML = `
+    <section class="card">
+      <div class="section-label">Engineering Package</div>
+      <div class="hero">
+        <div>
+          <div class="hero-title">${esc(pkg.vehicle_model)}</div>
+          <div class="hero-sub">${esc(pkg.vehicle_type)}</div>
+        </div>
+        <div><span class="badge">${esc(pkg.handover_status)}</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Control References</div>
+      <div class="kv-grid">
+        <div class="kv"><span class="kv-label">Order ID</span><span class="kv-value mono">${esc(pkg.order_id)}</span></div>
+        <div class="kv"><span class="kv-label">BOM Reference</span><span class="kv-value mono">${esc(pkg.bom_reference || "-")}</span></div>
+        <div class="kv"><span class="kv-label">Drawing Set</span><span class="kv-value mono">${esc(pkg.drawing_set_reference || "-")}</span></div>
+        <div class="kv"><span class="kv-label">Quantity</span><span class="kv-value">${esc(order.qty)}</span></div>
+      </div>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Configuration Requirements</div>
+      <table>
+        <thead><tr><th>Option ID</th><th>Category</th><th>Engineering Requirement</th></tr></thead>
+        <tbody>${cfgRows}</tbody>
+      </table>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Compliance Requirements</div>
+      <div class="note-list">${compliance}</div>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Custom Build Notes</div>
+      <div class="note-list">${buildNotes}</div>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Build Context References</div>
+      <div class="note-list">${context}</div>
+    </section>
+
+    <section class="card">
+      <div class="section-label">Open Questions</div>
+      <div class="note-list">${questions}</div>
+    </section>
+  `;
+}
+
+function rows(items, mapper) {
+  return (items && items.length)
+    ? items.map(mapper).join("")
+    : `<tr><td colspan="3" style="color:#8A8A8A">No rows recorded</td></tr>`;
+}
+
+function notes(items, mapper, empty = "No items recorded.") {
+  return (items && items.length)
+    ? items.map((item) => `<div class="note"><span class="dot"></span><span>${mapper(item)}</span></div>`).join("")
+    : `<div style="color:#8A8A8A;font-size:13px">${empty}</div>`;
+}
+
+function esc(value) {
+  return String(value ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+load();
+</script>
+</body>
+</html>

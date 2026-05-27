@@ -1,0 +1,414 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TAG Vehicle Specification</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --orange:  #E8621A;
+    --black:   #0E0E0E;
+    --grey-1:  #1A1A1A;
+    --grey-2:  #2C2C2C;
+    --grey-3:  #4A4A4A;
+    --grey-4:  #8A8A8A;
+    --grey-5:  #D4D4D4;
+    --grey-6:  #F4F4F4;
+    --white:   #FFFFFF;
+    --font:    'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  body {
+    font-family: var(--font);
+    background: var(--grey-6);
+    color: var(--black);
+    min-height: 100vh;
+    padding: 40px 20px;
+  }
+
+  /* ── shell ── */
+  .page {
+    max-width: 860px;
+    margin: 0 auto;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  /* ── header bar ── */
+  .doc-header {
+    background: var(--black);
+    color: var(--white);
+    padding: 32px 40px 28px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+  }
+  .doc-header .brand { display: flex; flex-direction: column; gap: 4px; }
+  .doc-header .brand-name {
+    font-size: 22px;
+    font-weight: 700;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--orange);
+  }
+  .doc-header .brand-sub { font-size: 11px; letter-spacing: 0.08em; color: var(--grey-4); text-transform: uppercase; }
+  .doc-header .doc-meta { text-align: right; }
+  .doc-header .doc-type { font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-4); }
+  .doc-header .doc-ref { font-size: 14px; font-weight: 600; margin-top: 4px; }
+
+  /* ── orange rule ── */
+  .rule { height: 3px; background: var(--orange); }
+
+  /* ── section card ── */
+  .card {
+    background: var(--white);
+    border-bottom: 1px solid var(--grey-5);
+    padding: 28px 40px;
+  }
+  .card:last-child { border-bottom: none; }
+
+  .section-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--orange);
+    margin-bottom: 16px;
+  }
+
+  /* ── vehicle hero ── */
+  .vehicle-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 24px;
+  }
+  .vehicle-name { font-size: 32px; font-weight: 700; letter-spacing: -0.01em; }
+  .vehicle-type { font-size: 14px; color: var(--grey-3); margin-top: 4px; }
+  .vehicle-badges { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; }
+  .badge {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 4px 10px;
+    border-radius: 2px;
+  }
+  .badge-outline { border: 1px solid var(--grey-5); color: var(--grey-3); }
+  .badge-orange  { background: var(--orange); color: var(--white); }
+
+  /* ── key-value grid ── */
+  .kv-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 16px 24px;
+  }
+  .kv { display: flex; flex-direction: column; gap: 3px; }
+  .kv-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-4); font-weight: 600; }
+  .kv-value { font-size: 14px; font-weight: 500; color: var(--black); }
+
+  /* ── config table ── */
+  .config-table { width: 100%; border-collapse: collapse; }
+  .config-table th {
+    font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase;
+    color: var(--grey-4); font-weight: 600;
+    padding: 0 12px 10px 0; text-align: left; border-bottom: 1px solid var(--grey-5);
+  }
+  .config-table td {
+    padding: 12px 12px 12px 0;
+    font-size: 14px;
+    border-bottom: 1px solid var(--grey-6);
+    vertical-align: top;
+  }
+  .config-table tr:last-child td { border-bottom: none; }
+  .config-cat  { font-weight: 600; color: var(--grey-3); white-space: nowrap; }
+  .config-name { font-weight: 500; }
+  .config-price { text-align: right; white-space: nowrap; font-weight: 500; color: var(--grey-3); }
+  .config-price.delta { color: var(--black); font-weight: 600; }
+
+  /* ── compliance block ── */
+  .compliance-row { display: flex; gap: 12px; margin-bottom: 12px; }
+  .compliance-row:last-child { margin-bottom: 0; }
+  .compliance-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--orange); flex-shrink: 0; margin-top: 6px; }
+  .compliance-text { font-size: 14px; line-height: 1.5; color: var(--black); }
+  .compliance-label { font-size: 10px; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-4); font-weight: 600; margin-bottom: 4px; }
+
+  /* ── tech spec bar ── */
+  .tech-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1px;
+    background: var(--grey-5);
+    border: 1px solid var(--grey-5);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .tech-cell {
+    background: var(--white);
+    padding: 14px 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+  }
+  .tech-label { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--grey-4); font-weight: 700; }
+  .tech-value { font-size: 16px; font-weight: 700; color: var(--black); }
+  .tech-unit  { font-size: 10px; color: var(--grey-4); }
+
+  /* ── refs ── */
+  .ref-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .ref-row:last-child { margin-bottom: 0; }
+  .ref-key { font-size: 10px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; color: var(--grey-4); width: 120px; flex-shrink: 0; }
+  .ref-val { font-size: 13px; font-weight: 600; font-family: 'SF Mono', 'Fira Code', monospace; color: var(--black); }
+
+  /* ── footer ── */
+  .doc-footer {
+    background: var(--black);
+    color: var(--grey-4);
+    padding: 16px 40px;
+    display: flex;
+    justify-content: space-between;
+    font-size: 11px;
+    letter-spacing: 0.06em;
+  }
+
+  /* ── loading / error states ── */
+  .state {
+    background: var(--white);
+    padding: 60px 40px;
+    text-align: center;
+    color: var(--grey-3);
+  }
+  .state-title { font-size: 16px; font-weight: 600; margin-bottom: 8px; }
+  .state-sub   { font-size: 13px; color: var(--grey-4); }
+  .spinner {
+    width: 24px; height: 24px; border: 2px solid var(--grey-5);
+    border-top-color: var(--orange);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    margin: 0 auto 16px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  @media print {
+    body { background: white; padding: 0; }
+    .doc-footer { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="page" id="page">
+  <div style="background:#0E0E0E;padding:32px 40px 28px;display:flex;justify-content:space-between;align-items:flex-end;">
+    <div style="display:flex;flex-direction:column;gap:4px;">
+      <span style="font-size:22px;font-weight:700;letter-spacing:0.12em;text-transform:uppercase;color:#E8621A;font-family:system-ui;">TAG</span>
+      <span style="font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:#8A8A8A;font-family:system-ui;">Tactical &amp; Utility Vehicles</span>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:#8A8A8A;font-family:system-ui;">Vehicle Specification</div>
+      <div id="doc-ref" style="font-size:14px;font-weight:600;margin-top:4px;color:#fff;font-family:system-ui;">Loading…</div>
+    </div>
+  </div>
+  <div class="rule"></div>
+
+  <div id="content">
+    <div class="card state">
+      <div class="spinner"></div>
+      <div class="state-title">Fetching specification</div>
+      <div class="state-sub">Calling TAG Agent API…</div>
+    </div>
+  </div>
+
+  <div class="doc-footer" id="footer" style="display:none;">
+    <span id="footer-left">TAG Vehicle Systems — CONFIDENTIAL</span>
+    <span id="footer-right"></span>
+  </div>
+</div>
+
+<script>
+const API = '';   // same origin — served by Express
+
+async function load() {
+  // Allow ?order=ORD-XXXX in URL to view any order's spec
+  const params  = new URLSearchParams(location.search);
+  const orderId = params.get('order') || 'ORD-2026-POC';
+
+  try {
+    const orderRes = await fetch(API + '/api/orders/' + encodeURIComponent(orderId));
+    if (!orderRes.ok) throw new Error('Order ' + orderId + ' not found (HTTP ' + orderRes.status + ')');
+
+    const data = await orderRes.json();
+    // spec_json is the raw JSONB column; may be a string or already parsed
+    let specJson = data.spec?.spec_json ?? null;
+    if (typeof specJson === 'string') specJson = JSON.parse(specJson);
+
+    if (!specJson || !specJson.vehicle) {
+      throw new Error('No specification found for ' + orderId + ' — run generate_spec first.');
+    }
+
+    render(specJson, data.order, data.configuration || []);
+  } catch (err) {
+    document.getElementById('content').innerHTML = `
+      <div class="card state">
+        <div class="state-title">Could not load specification</div>
+        <div class="state-sub">${esc(err.message)}</div>
+      </div>`;
+  }
+}
+
+function usd(n) {
+  return n != null
+    ? 'USD ' + Number(n).toLocaleString()
+    : '—';
+}
+
+// dbCfg = rows from order_configurations join (have category + option_name)
+function render(s, order, dbCfg) {
+  const v   = s.vehicle || {};
+  const td  = s.technical_data || {};
+  const cr  = s.custom_requirements || {};
+
+  // Prefer the richer DB rows (have category); fall back to spec JSON config
+  const cfg = (dbCfg && dbCfg.length)
+    ? dbCfg.map(r => ({ id: r.id, category: r.category, name: r.option_name, add_on_price: r.add_on_price_usd }))
+    : (Array.isArray(s.configuration) ? s.configuration : []);
+
+  document.getElementById('doc-ref').textContent =
+    `SPEC / ${order?.id ?? 'ORD-2026-POC'} / v${s.spec_version ?? '1.0'}`;
+
+  // Config rows
+  const cfgRows = cfg.length
+    ? cfg.map(c => `
+        <tr>
+          <td class="config-cat">${esc(c.category ?? '—')}</td>
+          <td class="config-name">${esc(c.option ?? c.name ?? '—')}</td>
+          <td class="config-price ${(c.add_on_price||c.add_on_price_usd) ? 'delta' : ''}">
+            ${ (c.add_on_price || c.add_on_price_usd)
+               ? '+ ' + usd(c.add_on_price ?? c.add_on_price_usd)
+               : 'Included' }
+          </td>
+        </tr>`).join('')
+    : `<tr><td colspan="3" style="color:#8A8A8A;font-size:13px;padding:12px 0;">No configuration data</td></tr>`;
+
+  // Compliance items
+  const compItems = [
+    cr.compliance && { label: 'Compliance', text: cr.compliance },
+    cr.delivery   && { label: 'Delivery',   text: cr.delivery },
+    cr.notes      && { label: 'Notes',      text: cr.notes },
+  ].filter(Boolean);
+
+  const compHtml = compItems.length
+    ? compItems.map(item => `
+        <div class="compliance-row">
+          <div class="compliance-dot"></div>
+          <div>
+            <div class="compliance-label">${esc(item.label)}</div>
+            <div class="compliance-text">${esc(item.text)}</div>
+          </div>
+        </div>`).join('')
+    : `<div style="color:#8A8A8A;font-size:13px;">No custom requirements recorded</div>`;
+
+  document.getElementById('content').innerHTML = `
+    <!-- vehicle hero -->
+    <div class="card">
+      <div class="section-label">Vehicle</div>
+      <div class="vehicle-hero">
+        <div>
+          <div class="vehicle-name">${esc(v.model_code ?? v.model ?? 'TUV-1200')}</div>
+          <div class="vehicle-type">${esc(v.type ?? '—')}</div>
+        </div>
+        <div class="vehicle-badges">
+          <span class="badge badge-orange">${esc(order?.status ?? 'Draft')}</span>
+          <span class="badge badge-outline">Qty ${esc(String(order?.qty ?? '—'))}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- configuration -->
+    <div class="card">
+      <div class="section-label">Configuration</div>
+      <table class="config-table">
+        <thead>
+          <tr>
+            <th style="width:130px;">Category</th>
+            <th>Option</th>
+            <th style="text-align:right;">Add-on price</th>
+          </tr>
+        </thead>
+        <tbody>${cfgRows}</tbody>
+      </table>
+    </div>
+
+    <!-- dimensions -->
+    <div class="card">
+      <div class="section-label">Technical Data</div>
+      <div class="tech-row">
+        <div class="tech-cell">
+          <span class="tech-label">Length</span>
+          <span class="tech-value">${td.length_mm ?? '—'}</span>
+          <span class="tech-unit">mm</span>
+        </div>
+        <div class="tech-cell">
+          <span class="tech-label">Width</span>
+          <span class="tech-value">${td.width_mm ?? '—'}</span>
+          <span class="tech-unit">mm</span>
+        </div>
+        <div class="tech-cell">
+          <span class="tech-label">Height</span>
+          <span class="tech-value">${td.height_mm ?? '—'}</span>
+          <span class="tech-unit">mm</span>
+        </div>
+        <div class="tech-cell">
+          <span class="tech-label">Weight</span>
+          <span class="tech-value">${td.weight_kg ?? '—'}</span>
+          <span class="tech-unit">kg</span>
+        </div>
+      </div>
+      <div style="margin-top:20px;">
+        <div class="ref-row">
+          <span class="ref-key">BOM Ref</span>
+          <span class="ref-val">${esc(td.bom_reference ?? '—')}</span>
+        </div>
+        <div class="ref-row">
+          <span class="ref-key">Drawing Ref</span>
+          <span class="ref-val">${esc(td.drawing_set_reference ?? '—')}</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- compliance -->
+    <div class="card">
+      <div class="section-label">Custom Requirements</div>
+      ${compHtml}
+    </div>
+
+    <!-- generated at -->
+    <div class="card" style="background:#F9F9F9;padding:16px 40px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:11px;color:#8A8A8A;letter-spacing:0.06em;text-transform:uppercase;">
+        Generated by TAG Vehicle Config Agent
+      </span>
+      <span style="font-size:11px;color:#8A8A8A;">
+        ${s.generated_at ? new Date(s.generated_at).toLocaleString() : new Date().toLocaleString()}
+      </span>
+    </div>
+  `;
+
+  document.getElementById('footer').style.display = 'flex';
+  document.getElementById('footer-left').textContent = 'TAG Vehicle Systems — CONFIDENTIAL';
+  document.getElementById('footer-right').textContent = `Order ${order?.id ?? ''} · Client ${order?.client_name ?? ''}`;
+}
+
+function esc(str) {
+  return String(str ?? '')
+    .replace(/&/g,'&amp;')
+    .replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;')
+    .replace(/"/g,'&quot;');
+}
+
+load();
+</script>
+</body>
+</html>
