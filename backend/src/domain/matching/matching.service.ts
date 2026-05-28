@@ -1,19 +1,4 @@
-import { getStore } from "../../data/index.js";
 import { getConfigurationOptions, listVehicleModels, searchPastOrders } from "../vehicle/vehicle.service.js";
-import { extractIntakeFromIntent } from "../intake/intake.service.js";
-import { buildIntakeProgress } from "../intake/intake.service.js";
-
-function recommendedOptionsFromConfig(
-  configOptions: Awaited<ReturnType<typeof getConfigurationOptions>>,
-  optionIds: string[],
-): string[] {
-  const optionNamesById = new Map(
-    Object.values(configOptions.categories)
-      .flat()
-      .map((option) => [option.id, option.name]),
-  );
-  return optionIds.map((id) => optionNamesById.get(id) ?? id);
-}
 
 function normalizeCode(value: string): string {
   return value.toLowerCase().replace(/[\s-_]/g, "");
@@ -111,11 +96,6 @@ export async function recommendFromClientIntent(input: {
 
   const intent = `${input.user_text ?? ""} ${input.opportunity_note ?? ""}`.trim();
   const normalizedIntent = intent.toLowerCase().replace(/[-_/]/g, " ");
-  const extracted = extractIntakeFromIntent(intent, {
-    client_id: input.client_id,
-    engagement_ref: input.engagement_ref,
-  });
-  const intakeProgress = buildIntakeProgress(extracted.field_answers);
 
   if (!input.vehicle_model_id && !hasMeaningfulVehicleIntent(normalizedIntent)) {
     throw new Error(
@@ -142,55 +122,6 @@ export async function recommendFromClientIntent(input: {
     searchPastOrders(input.client_id, selectedVehicle.id, 3),
     getConfigurationOptions(selectedVehicle.id),
   ]);
-
-  if (input.engagement_ref && intent.trim().length > 0) {
-    const extractedRequirements = extracted.requirements;
-    if (extractedRequirements.length > 0) {
-      await getStore().createOrUpdateEngagementRequirements({
-        engagement_ref: input.engagement_ref,
-        requirements: extractedRequirements,
-      });
-      const matched = await getStore().runRequirementMatch({
-        engagement_ref: input.engagement_ref,
-        vehicle_model_id: input.vehicle_model_id,
-      });
-      if (matched.candidates.length > 0) {
-        const top = matched.candidates[0];
-        const matchedVehicle =
-          vehicles.find((v) => v.id === top.vehicle_model_id) ?? selectedVehicle;
-        return {
-          recommended_vehicle: {
-            vehicle_model_id: matchedVehicle.id,
-            model_code: matchedVehicle.model_code,
-            type: matchedVehicle.type,
-            image_url: matchedVehicle.image_url,
-            reason: top.summary,
-          },
-          recommended_configuration: {
-            source_order_id: history[0]?.order_id ?? null,
-            options: recommendedOptionsFromConfig(configOptions, history[0]?.configuration_option_ids ?? []),
-            configuration_option_ids: history[0]?.configuration_option_ids ?? [],
-            match_reason: `Matched mandatory ${top.matched_mandatory}/${top.total_mandatory}`,
-          },
-          recommendations: matched.candidates.map((c) => ({
-            order_id: `REQMATCH-${c.rank}`,
-            rank: c.rank,
-            match_reason: c.summary,
-            configuration_summary: `${c.type} (${Math.round(c.match_score * 100)}% match)`,
-            configuration_option_ids: [],
-            unit_price_usd: null,
-            date: new Date().toISOString().slice(0, 10),
-          })),
-          has_history: history.length > 0,
-          next_actions: ["use_configuration", "generate_spec", "generate_quote"],
-          intake_progress: intakeProgress,
-          next_questions: intakeProgress.next_questions,
-          intake_review: extracted.intake_review,
-          inferred_signals: extracted.signals,
-        };
-      }
-    }
-  }
 
   const requestedOptions = Object.values(configOptions.categories)
     .flat()
@@ -250,9 +181,5 @@ export async function recommendFromClientIntent(input: {
     })),
     has_history: history.length > 0,
     next_actions: ["use_configuration", "generate_spec", "generate_quote"],
-    intake_progress: intakeProgress,
-    next_questions: intakeProgress.next_questions,
-    intake_review: extracted.intake_review,
-    inferred_signals: extracted.signals,
   };
 }
