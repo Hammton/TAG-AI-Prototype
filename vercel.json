@@ -1,18 +1,6 @@
 {
-    "rewrites": [
-        { "source": "/api/(.*)", "destination": "/_/backend/api/$1" },
-        { "source": "/health", "destination": "/_/backend/health" }
-    ],
-    "experimentalServices": {
-        "frontend": {
-            "root": "frontend",
-            "routePrefix": "/",
-            "framework": "vite"
-        },
-        "backend": {
-            "root": "backend",
-            "routePrefix": "/_/backend",
-            "entrypoint": "api.ts"
-        }
-    }
+  "framework": "vite",
+  "buildCommand": "npm run build",
+  "outputDirectory": "dist",
+  "installCommand": "npm ci"
 }

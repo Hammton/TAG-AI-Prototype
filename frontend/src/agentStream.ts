@@ -1,3 +1,5 @@
+import { API } from "./api";
+
 export type AgentActivityEvent =
   | { type: "phase"; phase: string; message: string }
   | {
@@ -221,7 +223,7 @@ export async function streamAgent<T>(
   body: Record<string, unknown>,
   onEvent: (event: AgentActivityEvent) => void,
 ): Promise<AgentStreamResult<T>> {
-  const res = await fetch("/api/agent/stream", {
+  const res = await fetch(`${API}/api/agent/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify(body),
@@ -298,7 +300,7 @@ async function streamAgentFallback<T>(
     message: "Completing request…",
   });
 
-  const res = await fetch("/api/agent", {
+  const res = await fetch(`${API}/api/agent`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

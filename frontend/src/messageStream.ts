@@ -1,3 +1,4 @@
+import { API } from "./api";
 import type { AgentActivityEvent } from "./agentStream";
 import { friendlyAgentError, streamAgent } from "./agentStream";
 import type { Audience, ArtifactKey } from "./types";
@@ -14,7 +15,7 @@ export async function streamUserMessage(
   body: Record<string, unknown>,
   handlers: StreamMessageHandlers,
 ): Promise<MessageDoneEvent> {
-  const res = await fetch("/api/message/stream", {
+  const res = await fetch(`${API}/api/message/stream`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Accept: "text/event-stream" },
     body: JSON.stringify(body),

@@ -1,3 +1,4 @@
+import { API } from "./api";
 import type { Artifact, ArtifactKey } from "./types";
 
 /** Printable HTML artifact (web-artifacts-builder style: single self-contained file). */
@@ -73,7 +74,7 @@ export async function downloadDocxArtifact(payload: {
   data: unknown;
   meta: { orderId: string; clientLabel: string; vehicleCode?: string };
 }) {
-  const res = await fetch("/api/export/docx", {
+  const res = await fetch(`${API}/api/export/docx`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
