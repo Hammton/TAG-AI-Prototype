@@ -1,8 +1,6 @@
 import { describe, expect, it } from "vitest";
-import {
-  calculateQuoteLineItems,
-  searchPastOrders,
-} from "../src/domain/tools.js";
+import { calculateQuoteLineItems } from "../src/domain/quoting/quoting.service.js";
+import { searchPastOrders } from "../src/domain/vehicle/vehicle.service.js";
 
 describe("calculateQuoteLineItems", () => {
   it("computes unit price and total for TUV configuration", async () => {
