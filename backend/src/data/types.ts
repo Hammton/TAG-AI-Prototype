@@ -74,4 +74,64 @@ export interface DataStore {
     status?: string;
   }): Promise<unknown[]>;
   getOrder(order_id: string): Promise<unknown | null>;
+
+  listVehicleClasses(): Promise<Array<{ id: string; code: string; label: string }>>;
+  listEngagements(filters?: { client_id?: string; status?: string }): Promise<unknown[]>;
+  getEngagement(reference: string): Promise<unknown | null>;
+  createEngagement(input: {
+    reference: string;
+    customer_org_code: string;
+    customer_contact_email?: string | null;
+    account_manager_code?: string | null;
+    vehicle_class_code: string;
+    status?: string;
+    country_of_use?: string | null;
+    theatre?: string | null;
+    am_notes?: string | null;
+  }): Promise<{ id: string; reference: string }>;
+  createOrUpdateEngagementRequirements(input: {
+    engagement_ref: string;
+    requirements: Array<{
+      section: string;
+      parameter: string;
+      value_text: string;
+      priority?: "MANDATORY" | "DESIRED" | "OPTIONAL";
+      source?: "CUSTOMER" | "AM_ASSUMED" | "ENGINEERING_DEFAULT";
+      confirmed?: boolean;
+    }>;
+  }): Promise<number>;
+  runRequirementMatch(input: {
+    engagement_ref: string;
+    vehicle_model_id?: string;
+  }): Promise<{
+    recommendation_id: string;
+    candidates: Array<{
+      vehicle_model_id: string;
+      model_code: string;
+      type: string;
+      rank: number;
+      match_score: number;
+      match_tier: "EXACT" | "CLOSE" | "POSSIBLE" | "REQUIRES_CUSTOMISATION";
+      matched_mandatory: number;
+      total_mandatory: number;
+      matched_desired: number;
+      total_desired: number;
+      gaps: Array<{ parameter: string; required: string; actual: string; severity: string }>;
+      summary: string;
+    }>;
+  }>;
+  createSalesOrderFromEngagement(input: {
+    engagement_ref: string;
+    sales_order_ref: string;
+    vehicle_model_id: string;
+    quantity: number;
+  }): Promise<{ sales_order_ref: string }>;
+  buildStage3SpecSections(input: {
+    sales_order_ref: string;
+    spec_document_number: string;
+    generated_by?: string;
+  }): Promise<{ specification_id: string; sections_created: number }>;
+  persistSpecTraceability(input: {
+    spec_document_number: string;
+  }): Promise<{ linked_requirements: number }>;
 }

@@ -24,7 +24,7 @@ async function main() {
 
   const app = createApp();
   app.listen(env.PORT, () => {
-    console.log(`TAG Agent API  http://localhost:${env.PORT}`);
+    console.log(`TAG API  http://localhost:${env.PORT}`);
     console.log(`Data: ${usesPostgres() ? "Supabase Postgres" : "in-memory"}`);
     console.log(
       isLlmEnabled()

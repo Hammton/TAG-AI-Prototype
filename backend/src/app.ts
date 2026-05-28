@@ -4,20 +4,10 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-import type { AgentActivityEvent } from "./agent/activity.js";
-import { runChat } from "./agent/chat.js";
-import { classifyIntent } from "./agent/intent.js";
-import { runAgent } from "./agent/index.js";
-import { streamUserMessage } from "./agent/orchestrate.js";
 import { buildDocxBuffer } from "./lib/build-docx.js";
 import { getEnv, getActiveModel, isLlmEnabled, usesPostgres } from "./config.js";
 import { checkDatabase } from "./db/sql.js";
 import { getStore } from "./data/index.js";
-import { agentRequestSchema } from "./schemas/agent.js";
-import { chatRequestSchema } from "./schemas/chat.js";
-import { intentRequestSchema } from "./schemas/intent.js";
-import { messageRequestSchema } from "./schemas/message.js";
-import { prepareSseResponse, writeSse, writeSseKeepalive } from "./lib/sse.js";
 
 export function createApp() {
   const app = express();
@@ -88,36 +78,6 @@ export function createApp() {
     }
   });
 
-  app.post("/api/intent", async (req, res, next) => {
-    try {
-      const body = intentRequestSchema.parse(req.body);
-      const result = await classifyIntent(body);
-      res.json(result);
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  app.post("/api/chat", async (req, res, next) => {
-    try {
-      const body = chatRequestSchema.parse(req.body);
-      const { reply, engine } = await runChat(body);
-      res.json({ reply, engine });
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  app.post("/api/agent", async (req, res, next) => {
-    try {
-      const body = agentRequestSchema.parse(req.body);
-      const { result, engine, record_id } = await runAgent(body);
-      res.json({ mode: body.mode, result, engine, record_id });
-    } catch (err) {
-      next(err);
-    }
-  });
-
   app.post("/api/export/docx", async (req, res, next) => {
     try {
       const body = req.body as {
@@ -146,67 +106,6 @@ export function createApp() {
     }
   });
 
-  app.post("/api/message/stream", async (req, res, next) => {
-    try {
-      const body = messageRequestSchema.parse(req.body);
-      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders?.();
-      prepareSseResponse(res);
-
-      const write = (event: AgentActivityEvent) => writeSse(res, event);
-      write({ type: "thinking", message: "Connected", live: true });
-
-      const keepalive = setInterval(() => writeSseKeepalive(res), 8_000);
-
-      try {
-        await streamUserMessage(body, write);
-        res.end();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        write({ type: "error", message });
-        res.end();
-      } finally {
-        clearInterval(keepalive);
-      }
-    } catch (err) {
-      next(err);
-    }
-  });
-
-  app.post("/api/agent/stream", async (req, res, next) => {
-    try {
-      const body = agentRequestSchema.parse(req.body);
-      res.setHeader("Content-Type", "text/event-stream; charset=utf-8");
-      res.setHeader("Cache-Control", "no-cache, no-transform");
-      res.setHeader("Connection", "keep-alive");
-      res.setHeader("X-Accel-Buffering", "no");
-      res.flushHeaders?.();
-
-      const write = (event: AgentActivityEvent) => writeSse(res, event);
-
-      try {
-        const { result, engine, record_id } = await runAgent(body, write);
-        write({
-          type: "result",
-          mode: body.mode,
-          result,
-          engine,
-          record_id,
-        });
-        res.end();
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        write({ type: "error", message });
-        res.end();
-      }
-    } catch (err) {
-      next(err);
-    }
-  });
-
   app.use(
     (
       err: unknown,
@@ -219,8 +118,7 @@ export function createApp() {
         return;
       }
       const message = err instanceof Error ? err.message : "Unknown error";
-      const status = message === "agent_loop_limit" ? 504 : 500;
-      res.status(status).json({ error: message });
+      res.status(500).json({ error: message });
     },
   );
 

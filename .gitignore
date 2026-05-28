@@ -41,7 +41,15 @@ coverage/
 .parcel-cache/
 .vite/
 
+# Project planning / doc files (keep README.md)
+*.md
+!README.md
+!.claude/**/*.md
+!backend/**/*.md
+
 # Misc
 tmp/
 tmp-*.json
 *.tmp
+.kiro/
+UsersAdministratoruserTAGtemp_repo/

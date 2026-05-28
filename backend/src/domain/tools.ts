@@ -22,6 +22,7 @@ export async function getConfigurationOptions(vehicle_model_id: string) {
 
 export async function recommendFromClientIntent(input: {
   client_id: string;
+  engagement_ref?: string;
   user_text?: string;
   opportunity_note?: string;
   vehicle_model_id?: string;
@@ -33,6 +34,11 @@ export async function recommendFromClientIntent(input: {
 
   const intent = `${input.user_text ?? ""} ${input.opportunity_note ?? ""}`.trim();
   const normalizedIntent = intent.toLowerCase().replace(/[-_/]/g, " ");
+  const extracted = extractIntakeFromIntent(intent, {
+    client_id: input.client_id,
+    engagement_ref: input.engagement_ref,
+  });
+  const intakeProgress = buildIntakeProgress(extracted.field_answers);
 
   if (!input.vehicle_model_id && !hasMeaningfulVehicleIntent(normalizedIntent)) {
     throw new Error(
@@ -59,6 +65,56 @@ export async function recommendFromClientIntent(input: {
     searchPastOrders(input.client_id, selectedVehicle.id, 3),
     getConfigurationOptions(selectedVehicle.id),
   ]);
+
+  // Stage-native requirement capture + deterministic matching persistence.
+  if (input.engagement_ref && intent.trim().length > 0) {
+    const extractedRequirements = extracted.requirements;
+    if (extractedRequirements.length > 0) {
+      await getStore().createOrUpdateEngagementRequirements({
+        engagement_ref: input.engagement_ref,
+        requirements: extractedRequirements,
+      });
+      const matched = await getStore().runRequirementMatch({
+        engagement_ref: input.engagement_ref,
+        vehicle_model_id: input.vehicle_model_id,
+      });
+      if (matched.candidates.length > 0) {
+        const top = matched.candidates[0];
+        const matchedVehicle =
+          vehicles.find((v) => v.id === top.vehicle_model_id) ?? selectedVehicle;
+        return {
+          recommended_vehicle: {
+            vehicle_model_id: matchedVehicle.id,
+            model_code: matchedVehicle.model_code,
+            type: matchedVehicle.type,
+            image_url: matchedVehicle.image_url,
+            reason: top.summary,
+          },
+          recommended_configuration: {
+            source_order_id: history[0]?.order_id ?? null,
+            options: recommendedOptionsFromConfig(configOptions, history[0]?.configuration_option_ids ?? []),
+            configuration_option_ids: history[0]?.configuration_option_ids ?? [],
+            match_reason: `Matched mandatory ${top.matched_mandatory}/${top.total_mandatory}`,
+          },
+          recommendations: matched.candidates.map((c) => ({
+            order_id: `REQMATCH-${c.rank}`,
+            rank: c.rank,
+            match_reason: c.summary,
+            configuration_summary: `${c.type} (${Math.round(c.match_score * 100)}% match)`,
+            configuration_option_ids: [],
+            unit_price_usd: null,
+            date: new Date().toISOString().slice(0, 10),
+          })),
+          has_history: history.length > 0,
+          next_actions: ["use_configuration", "generate_spec", "generate_quote"],
+          intake_progress: intakeProgress,
+          next_questions: intakeProgress.next_questions,
+          intake_review: extracted.intake_review,
+          inferred_signals: extracted.signals,
+        };
+      }
+    }
+  }
 
   const requestedOptions = Object.values(configOptions.categories)
     .flat()
@@ -118,7 +174,331 @@ export async function recommendFromClientIntent(input: {
     })),
     has_history: history.length > 0,
     next_actions: ["use_configuration", "generate_spec", "generate_quote"],
+    intake_progress: intakeProgress,
+    next_questions: intakeProgress.next_questions,
+    intake_review: extracted.intake_review,
+    inferred_signals: extracted.signals,
   };
+}
+
+type Stage1FieldDefinition = {
+  key: string;
+  section: string;
+  question: string;
+  required: boolean;
+};
+
+const STAGE1_FIELDS: Stage1FieldDefinition[] = [
+  { key: "customer_organisation", section: "CUSTOMER_ENGAGEMENT", question: "Customer / Organisation?", required: true },
+  { key: "country_region", section: "CUSTOMER_ENGAGEMENT", question: "Country / Region?", required: true },
+  { key: "contact_name", section: "CUSTOMER_ENGAGEMENT", question: "Contact Name?", required: true },
+  { key: "contact_role", section: "CUSTOMER_ENGAGEMENT", question: "Contact Title / Role?", required: true },
+  { key: "date_of_engagement", section: "CUSTOMER_ENGAGEMENT", question: "Date of engagement?", required: true },
+  { key: "account_manager", section: "CUSTOMER_ENGAGEMENT", question: "Account Manager?", required: true },
+  { key: "opportunity_reference", section: "CUSTOMER_ENGAGEMENT", question: "Opportunity reference?", required: true },
+  { key: "procurement_type", section: "CUSTOMER_ENGAGEMENT", question: "Procurement type (e.g., G2G)?", required: true },
+
+  { key: "primary_role", section: "OPERATIONAL_CONTEXT", question: "Primary mission role?", required: true },
+  { key: "secondary_role", section: "OPERATIONAL_CONTEXT", question: "Secondary role (if any)?", required: false },
+  { key: "operational_theatre", section: "OPERATIONAL_CONTEXT", question: "Operational theatre?", required: true },
+  { key: "threat_environment", section: "OPERATIONAL_CONTEXT", question: "Threat environment?", required: true },
+  { key: "mission_duration", section: "OPERATIONAL_CONTEXT", question: "Typical mission duration?", required: false },
+  { key: "vehicle_quantity", section: "OPERATIONAL_CONTEXT", question: "Number of vehicles required?", required: true },
+  { key: "delivery_timeline", section: "OPERATIONAL_CONTEXT", question: "First delivery timeline requirement?", required: true },
+
+  { key: "crew", section: "PERSONNEL_PAYLOAD", question: "Crew per vehicle?", required: true },
+  { key: "dismounts", section: "PERSONNEL_PAYLOAD", question: "Dismounts per vehicle?", required: true },
+  { key: "soldier_load", section: "PERSONNEL_PAYLOAD", question: "Individual soldier load?", required: false },
+  { key: "medical_configuration", section: "PERSONNEL_PAYLOAD", question: "Medical configuration requirement?", required: false },
+  { key: "cargo_payload", section: "PERSONNEL_PAYLOAD", question: "Cargo payload in alternate role?", required: false },
+
+  { key: "ballistic_small_arms", section: "PROTECTION", question: "Ballistic small-arms minimum level?", required: true },
+  { key: "ballistic_ap", section: "PROTECTION", question: "Ballistic armour-piercing minimum level?", required: true },
+  { key: "mine_underbelly", section: "PROTECTION", question: "Mine blast underbelly requirement?", required: true },
+  { key: "mine_side", section: "PROTECTION", question: "Mine blast side requirement?", required: true },
+  { key: "ied_protection", section: "PROTECTION", question: "IED / VBIED requirement?", required: true },
+  { key: "rpg_protection", section: "PROTECTION", question: "RPG protection requirement?", required: false },
+  { key: "nbc_requirement", section: "PROTECTION", question: "NBC / CBRN requirement?", required: false },
+
+  { key: "drive_configuration", section: "MOBILITY", question: "Drive configuration requirement?", required: true },
+  { key: "max_road_speed", section: "MOBILITY", question: "Maximum road speed requirement?", required: false },
+  { key: "cross_country_speed", section: "MOBILITY", question: "Cross-country speed requirement?", required: false },
+  { key: "operational_range", section: "MOBILITY", question: "Operational range requirement?", required: false },
+  { key: "fording_depth", section: "MOBILITY", question: "Fording depth requirement?", required: false },
+  { key: "gradient", section: "MOBILITY", question: "Gradient requirement?", required: false },
+  { key: "side_slope", section: "MOBILITY", question: "Side slope requirement?", required: false },
+  { key: "ground_clearance", section: "MOBILITY", question: "Ground clearance requirement?", required: false },
+  { key: "air_transportability", section: "MOBILITY", question: "Air transportability requirement?", required: false },
+
+  { key: "primary_armament", section: "WEAPON_SYSTEM", question: "Primary armament preference?", required: false },
+  { key: "mounting_type", section: "WEAPON_SYSTEM", question: "Mounting type preference?", required: false },
+  { key: "night_capability", section: "WEAPON_SYSTEM", question: "Night/all-weather capability required?", required: false },
+  { key: "smoke_dischargers", section: "WEAPON_SYSTEM", question: "Smoke grenade discharger requirement?", required: false },
+  { key: "firing_ports", section: "WEAPON_SYSTEM", question: "Firing ports requirement?", required: false },
+
+  { key: "radio_suite", section: "C4I", question: "Radio suite requirement?", required: false },
+  { key: "bms_architecture", section: "C4I", question: "BMS architecture requirement?", required: false },
+  { key: "gps_navigation", section: "C4I", question: "GPS / navigation requirement?", required: false },
+  { key: "intercom", section: "C4I", question: "Intercom requirement?", required: false },
+  { key: "antenna_provision", section: "C4I", question: "External antenna provision requirement?", required: false },
+  { key: "data_bus", section: "C4I", question: "Data bus architecture requirement?", required: false },
+
+  { key: "in_country_support", section: "LOGISTICS_SUPPORT", question: "In-country support requirement?", required: false },
+  { key: "training", section: "LOGISTICS_SUPPORT", question: "Training requirement?", required: false },
+  { key: "spares_holding", section: "LOGISTICS_SUPPORT", question: "Spares holding requirement?", required: false },
+  { key: "documentation_language", section: "LOGISTICS_SUPPORT", question: "Documentation language requirement?", required: false },
+  { key: "warranty", section: "LOGISTICS_SUPPORT", question: "Warranty requirement?", required: false },
+  { key: "technology_transfer", section: "LOGISTICS_SUPPORT", question: "Technology transfer requirement?", required: false },
+  { key: "mtbf", section: "LOGISTICS_SUPPORT", question: "MTBF requirement?", required: false },
+
+  { key: "indicative_budget", section: "COMMERCIAL", question: "Indicative budget?", required: false },
+  { key: "financing_requirement", section: "COMMERCIAL", question: "Financing requirement?", required: false },
+  { key: "offset_requirement", section: "COMMERCIAL", question: "Offset/localisation requirement?", required: false },
+  { key: "incoterms", section: "COMMERCIAL", question: "Incoterms?", required: false },
+  { key: "preferred_contract_type", section: "COMMERCIAL", question: "Preferred contract type?", required: false },
+];
+
+type Stage1FieldAnswers = Partial<Record<(typeof STAGE1_FIELDS)[number]["key"], string>>;
+
+function buildIntakeProgress(field_answers: Stage1FieldAnswers): {
+  captured_sections: string[];
+  missing_sections: string[];
+  completeness: number;
+  next_questions: string[];
+} {
+  const sectionByField = new Map(STAGE1_FIELDS.map((f) => [f.key, f.section]));
+  const capturedSectionsSet = new Set<string>();
+  const missingSectionsSet = new Set<string>();
+
+  let requiredTotal = 0;
+  let requiredCaptured = 0;
+
+  for (const field of STAGE1_FIELDS) {
+    const hasValue = Boolean(field_answers[field.key]?.trim());
+    if (hasValue) capturedSectionsSet.add(sectionByField.get(field.key) ?? "GENERAL");
+    if (field.required) {
+      requiredTotal += 1;
+      if (hasValue) requiredCaptured += 1;
+      else missingSectionsSet.add(sectionByField.get(field.key) ?? "GENERAL");
+    }
+  }
+
+  const next_questions = STAGE1_FIELDS.filter(
+    (f) => f.required && !field_answers[f.key]?.trim(),
+  )
+    .slice(0, 3)
+    .map((f) => f.question);
+
+  return {
+    captured_sections: Array.from(capturedSectionsSet),
+    missing_sections: Array.from(missingSectionsSet),
+    completeness: requiredTotal === 0 ? 0 : Number((requiredCaptured / requiredTotal).toFixed(2)),
+    next_questions,
+  };
+}
+
+type IntakeExtraction = {
+  field_answers: Stage1FieldAnswers;
+  intake_review: Record<string, Record<string, string | null>>;
+  requirements: Array<{
+    section: string;
+    parameter: string;
+    value_text: string;
+    priority?: "MANDATORY" | "DESIRED" | "OPTIONAL";
+    source?: "CUSTOMER" | "AM_ASSUMED" | "ENGINEERING_DEFAULT";
+    confirmed?: boolean;
+  }>;
+  signals: {
+    urgency: "LOW" | "MEDIUM" | "HIGH";
+    confidence: "LOW" | "MEDIUM" | "HIGH";
+    sentiment: "NEUTRAL" | "ASSERTIVE" | "CONCERNED";
+    budget_sensitivity: "LOW" | "MEDIUM" | "HIGH";
+  };
+};
+
+function extractIntakeFromIntent(
+  intentRaw: string,
+  context: { client_id: string; engagement_ref?: string },
+): IntakeExtraction {
+  const intent = intentRaw.toLowerCase();
+  const field_answers: Stage1FieldAnswers = {};
+  const requirements: IntakeExtraction["requirements"] = [];
+
+  if (/\b(troop|personnel carrier|apc|casevac|patrol|vip|cash[\s-]*in[\s-]*transit)\b/.test(intent)) {
+    field_answers.primary_role = capturePhrase(intentRaw, /(troop transport|personnel carrier|apc|casevac|patrol|vip|cash[\s-]*in[\s-]*transit)/i);
+    requirements.push({
+      section: "OPERATIONAL",
+      parameter: "mission_profile",
+      value_text: field_answers.primary_role ?? "general_protected_transport",
+      priority: "MANDATORY",
+      source: "CUSTOMER",
+      confirmed: true,
+    });
+  }
+
+  if (/\b(urban|desert|savannah|mountain|coastal|east africa|africa)\b/.test(intent)) {
+    field_answers.operational_theatre = capturePhrase(intentRaw, /(urban|desert|savannah|mountain|coastal|east africa|africa)/i);
+    field_answers.country_region = field_answers.operational_theatre;
+  }
+
+  if (/\b(ied|rpg|mine|small arms|asymmetric|high threat|blast)\b/.test(intent)) {
+    field_answers.threat_environment = capturePhrase(intentRaw, /(ied|rpg|mine|small arms|asymmetric|high threat|blast)/i);
+  }
+
+  const qty = intentRaw.match(/(\d+)\s*(vehicles?|units?)/i);
+  if (qty) field_answers.vehicle_quantity = qty[0];
+  if (/\b(month|weeks?|delivery|timeline|first batch|urgent|asap)\b/i.test(intentRaw)) {
+    field_answers.delivery_timeline = capturePhrase(
+      intentRaw,
+      /((?:within|in)\s+\d+\s*(?:months?|weeks?)|first batch[^.,;]*|delivery[^.,;]*)/i,
+    );
+  }
+
+  if (/\b(crew|dismount|payload|stretcher|cargo)\b/.test(intent)) {
+    const cp = capturePhrase(intentRaw, /(crew[^.,;]*|dismount[^.,;]*|payload[^.,;]*|stretcher[^.,;]*)/i);
+    field_answers.crew = cp;
+    field_answers.dismounts = cp;
+    field_answers.cargo_payload = cp;
+    field_answers.medical_configuration = cp;
+  }
+
+  if (/\b(stanag\s*4569\s*level\s*\d[a-z]?|level\s*[ivx0-9]+|ballistic|blast|mine)\b/.test(intent)) {
+    const protection = capturePhrase(intentRaw, /(stanag[^.,;]*|level\s*[ivx0-9]+[^.,;]*|ballistic[^.,;]*|blast[^.,;]*)/i);
+    field_answers.ballistic_small_arms = protection;
+    field_answers.ballistic_ap = protection;
+    field_answers.mine_underbelly = protection;
+    field_answers.mine_side = protection;
+    field_answers.ied_protection = protection;
+    field_answers.rpg_protection = protection;
+    field_answers.nbc_requirement = protection;
+    requirements.push({
+      section: "PROTECTION",
+      parameter: "protection_baseline",
+      value_text: protection ?? "level_3",
+      priority: "MANDATORY",
+      source: "CUSTOMER",
+      confirmed: true,
+    });
+  }
+
+  if (/\b(4x4|6x6|8x8|speed|range|terrain|fording|c-130|transportability)\b/.test(intent)) {
+    const mobility = capturePhrase(intentRaw, /(4x4|6x6|8x8|speed[^.,;]*|range[^.,;]*|terrain[^.,;]*|c-130[^.,;]*)/i);
+    field_answers.drive_configuration = mobility;
+    field_answers.max_road_speed = mobility;
+    field_answers.cross_country_speed = mobility;
+    field_answers.operational_range = mobility;
+    field_answers.fording_depth = mobility;
+    field_answers.gradient = mobility;
+    field_answers.side_slope = mobility;
+    field_answers.ground_clearance = mobility;
+    field_answers.air_transportability = mobility;
+    if (/\b4x4\b/.test(intent) || /\b6x6\b/.test(intent) || /\b8x8\b/.test(intent)) {
+      requirements.push({
+        section: "MOBILITY",
+        parameter: "drive_config",
+        value_text: /\b8x8\b/.test(intent) ? "8x8" : /\b6x6\b/.test(intent) ? "6x6" : "4x4",
+        priority: "DESIRED",
+        source: "CUSTOMER",
+        confirmed: true,
+      });
+    }
+  }
+
+  if (/\b(rws|hmg|agl|weapon|radio|bms|c4i|training|spares|warranty)\b/.test(intent)) {
+    const systems = capturePhrase(intentRaw, /(rws[^.,;]*|hmg[^.,;]*|agl[^.,;]*|radio[^.,;]*|bms[^.,;]*|c4i[^.,;]*|training[^.,;]*|spares[^.,;]*|warranty[^.,;]*)/i);
+    field_answers.primary_armament = systems;
+    field_answers.mounting_type = systems;
+    field_answers.night_capability = systems;
+    field_answers.smoke_dischargers = systems;
+    field_answers.firing_ports = systems;
+    field_answers.radio_suite = systems;
+    field_answers.bms_architecture = systems;
+    field_answers.gps_navigation = systems;
+    field_answers.intercom = systems;
+    field_answers.antenna_provision = systems;
+    field_answers.data_bus = systems;
+    field_answers.training = systems;
+    field_answers.spares_holding = systems;
+    field_answers.warranty = systems;
+  }
+
+  const budgetLine = capturePhrase(intentRaw, /(\$|usd|budget|million|financing|offset|incoterm|ddp|fixed[-\s]*price)[^.,;]*/i);
+  if (budgetLine) {
+    field_answers.indicative_budget = budgetLine;
+    field_answers.financing_requirement = budgetLine;
+    field_answers.offset_requirement = budgetLine;
+    field_answers.incoterms = budgetLine;
+    field_answers.preferred_contract_type = budgetLine;
+  }
+
+  // Populate top customer/engagement metadata from context defaults when absent in free text.
+  field_answers.customer_organisation ??= context.client_id;
+  field_answers.opportunity_reference ??= context.engagement_ref;
+
+  const urgency: IntakeExtraction["signals"]["urgency"] =
+    /\b(urgent|asap|immediately|critical)\b/.test(intent) ? "HIGH" : /\b(soon|timeline|delivery)\b/.test(intent) ? "MEDIUM" : "LOW";
+  const confidence: IntakeExtraction["signals"]["confidence"] =
+    Object.values(field_answers).filter(Boolean).length >= 16
+      ? "HIGH"
+      : Object.values(field_answers).filter(Boolean).length >= 8
+        ? "MEDIUM"
+        : "LOW";
+  const sentiment: IntakeExtraction["signals"]["sentiment"] =
+    /\b(need|must|required|mandatory)\b/.test(intent) ? "ASSERTIVE" : /\b(concern|risk|worried|threat)\b/.test(intent) ? "CONCERNED" : "NEUTRAL";
+  const budget_sensitivity: IntakeExtraction["signals"]["budget_sensitivity"] =
+    /\b(budget|cost|price|afford|cheaper)\b/.test(intent) ? "HIGH" : /\b(option|value)\b/.test(intent) ? "MEDIUM" : "LOW";
+
+  return {
+    field_answers,
+    intake_review: buildIntakeReview(field_answers),
+    requirements: dedupeRequirements(requirements),
+    signals: { urgency, confidence, sentiment, budget_sensitivity },
+  };
+}
+
+function buildIntakeReview(field_answers: Stage1FieldAnswers): Record<string, Record<string, string | null>> {
+  const grouped: Record<string, Record<string, string | null>> = {};
+  for (const field of STAGE1_FIELDS) {
+    if (!grouped[field.section]) grouped[field.section] = {};
+    grouped[field.section][field.key] = field_answers[field.key] ?? null;
+  }
+  return grouped;
+}
+
+function capturePhrase(text: string, pattern: RegExp): string | undefined {
+  const m = text.match(pattern);
+  return m?.[0]?.trim();
+}
+
+function dedupeRequirements(
+  requirements: Array<{
+    section: string;
+    parameter: string;
+    value_text: string;
+    priority?: "MANDATORY" | "DESIRED" | "OPTIONAL";
+    source?: "CUSTOMER" | "AM_ASSUMED" | "ENGINEERING_DEFAULT";
+    confirmed?: boolean;
+  }>,
+) {
+  const seen = new Set<string>();
+  return requirements.filter((r) => {
+    const key = `${r.section}|${r.parameter}|${r.value_text}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
+
+function recommendedOptionsFromConfig(
+  configOptions: Awaited<ReturnType<typeof getConfigurationOptions>>,
+  optionIds: string[],
+): string[] {
+  const optionNamesById = new Map(
+    Object.values(configOptions.categories)
+      .flat()
+      .map((option) => [option.id, option.name]),
+  );
+  return optionIds.map((id) => optionNamesById.get(id) ?? id);
 }
 
 function normalizeCode(value: string): string {
@@ -169,7 +549,7 @@ export function hasMeaningfulVehicleIntent(intent: string): boolean {
   return intent.split(/\s+/).filter((w) => w.length > 2).length >= 2;
 }
 
-function scoreVehicleForIntent(
+export function scoreVehicleForIntent(
   vehicle: { model_code: string; type: string },
   intent: string,
 ) {
@@ -697,28 +1077,46 @@ export async function buildVehicleCapabilityContext(input: {
   };
 }
 
-export async function persistAgentOutput(
-  mode: string,
-  order_id: string | undefined,
-  result: unknown,
-): Promise<string | null> {
-  if (!order_id) return null;
-
-  const store = getStore();
-  if (mode === "generate_spec") {
-    return store.saveSpec(order_id, result);
-  }
-  if (mode === "generate_quote") {
-    const quote = result as {
-      total_usd?: number;
-      line_items?: Array<{ unit_price_usd?: number }>;
-    };
-    return store.saveQuote(
-      order_id,
-      result,
-      quote.line_items?.[0]?.unit_price_usd ?? null,
-      quote.total_usd ?? null,
-    );
-  }
-  return null;
+export async function createSalesOrderFromEngagement(input: {
+  engagement_ref: string;
+  sales_order_ref: string;
+  vehicle_model_id: string;
+  quantity: number;
+}) {
+  return getStore().createSalesOrderFromEngagement(input);
 }
+
+export async function buildStage3SpecSections(input: {
+  sales_order_ref: string;
+  spec_document_number: string;
+  generated_by?: string;
+}) {
+  return getStore().buildStage3SpecSections(input);
+}
+
+export async function persistSpecTraceability(input: { spec_document_number: string }) {
+  return getStore().persistSpecTraceability(input);
+}
+
+export async function createOrUpdateEngagementRequirements(input: {
+  engagement_ref: string;
+  requirements: Array<{
+    section: string;
+    parameter: string;
+    value_text: string;
+    priority?: "MANDATORY" | "DESIRED" | "OPTIONAL";
+    source?: "CUSTOMER" | "AM_ASSUMED" | "ENGINEERING_DEFAULT";
+    confirmed?: boolean;
+  }>;
+}) {
+  return getStore().createOrUpdateEngagementRequirements(input);
+}
+
+export async function runRequirementMatch(input: {
+  engagement_ref: string;
+  vehicle_model_id?: string;
+}) {
+  return getStore().runRequirementMatch(input);
+}
+
+

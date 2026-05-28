@@ -39,7 +39,7 @@ type Recommendation = {
   has_history: boolean;
 };
 
-type PanelView = "recommendations" | ArtifactKey;
+type PanelView = "recommendations" | "order" | ArtifactKey;
 
 const DEFAULT_PROMPT =
   "I need an armored personnel carrier for a police tactical response unit with troop transport capacity, blast protection, and fast deployment.";
@@ -82,6 +82,7 @@ export default function App() {
   const [busy, setBusy] = useState<WorkflowStep | null>(null);
   const [sending, setSending] = useState(false);
   const [panelView, setPanelView] = useState<PanelView | null>(null);
+  const [orderDocument, setOrderDocument] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
   const workingIdRef = useRef<string | null>(null);
   const threadEndRef = useRef<HTMLDivElement>(null);
@@ -94,7 +95,9 @@ export default function App() {
     panelView !== null &&
     (panelView === "recommendations"
       ? recommendation !== null
-      : artifacts[panelView] !== null);
+      : panelView === "order"
+        ? orderDocument !== null
+        : artifacts[panelView] !== null);
 
   const selectedOptionIds =
     recommendation?.recommended_configuration.configuration_option_ids ?? [];
@@ -127,7 +130,7 @@ export default function App() {
   }, [recommendation]);
 
   const currentArtifact =
-    panelView && panelView !== "recommendations" ? artifacts[panelView] : null;
+    panelView && panelView !== "recommendations" && panelView !== "order" ? artifacts[panelView] : null;
 
   useEffect(() => {
     threadEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -140,7 +143,16 @@ export default function App() {
     ]);
   }
 
-  function addAssistant(text: string, artifactRefs?: ArtifactRef[]) {
+  function addAssistant(
+    text: string,
+    artifactRefs?: ArtifactRef[],
+    intelligence?: {
+      conflicts?: import("./types").Conflict[];
+      suggestions?: import("./types").Suggestion[];
+      vehicle_preview?: import("./types").VehiclePreview;
+      intelligence_briefs?: import("./types").IntelligenceBrief[];
+    },
+  ) {
     setMessages((prev) => [
       ...prev,
       {
@@ -148,6 +160,10 @@ export default function App() {
         role: "assistant",
         text,
         artifacts: artifactRefs,
+        conflicts: intelligence?.conflicts,
+        suggestions: intelligence?.suggestions,
+        vehicle_preview: intelligence?.vehicle_preview,
+        intelligence_briefs: intelligence?.intelligence_briefs,
         at: Date.now(),
       },
     ]);
@@ -165,11 +181,26 @@ export default function App() {
     id: string,
     text: string,
     artifactRefs?: ArtifactRef[],
+    intelligence?: {
+      conflicts?: import("./types").Conflict[];
+      suggestions?: import("./types").Suggestion[];
+      vehicle_preview?: import("./types").VehiclePreview;
+      intelligence_briefs?: import("./types").IntelligenceBrief[];
+    },
   ) {
     setMessages((prev) =>
       prev.map((m) =>
         m.role === "assistant" && m.id === id
-          ? { ...m, text, artifacts: artifactRefs, streaming: false }
+          ? {
+              ...m,
+              text,
+              artifacts: artifactRefs,
+              conflicts: intelligence?.conflicts,
+              suggestions: intelligence?.suggestions,
+              vehicle_preview: intelligence?.vehicle_preview,
+              intelligence_briefs: intelligence?.intelligence_briefs,
+              streaming: false,
+            }
           : m,
       ),
     );
@@ -326,6 +357,9 @@ export default function App() {
                   "Finding the right vehicle and configuration",
                   activeStep,
                 );
+              } else if (event.intent === "order") {
+                activeStep = "quote";
+                updateWorkingMeta("Building sales order & commercial spec", activeStep);
               } else if (
                 event.intent === "chat" ||
                 event.intent === "clarify" ||
@@ -386,13 +420,30 @@ export default function App() {
         });
       }
 
+      if (done.order_document) {
+        setOrderDocument(done.order_document);
+        setPanelView("order");
+        artifactRefs.push({
+          id: "order-doc",
+          view: "order",
+          title: `${vehicleCode ?? "Vehicle"} — Sales Order & Commercial Spec`,
+          subtitle: "Document · Stage 2",
+        });
+      }
+      const intelligence = {
+        conflicts: done.conflicts,
+        suggestions: done.suggestions,
+        vehicle_preview: done.vehicle_preview,
+        intelligence_briefs: done.intelligence_briefs,
+      };
       if (!assistantStarted) {
-        addAssistant(done.reply, artifactRefs.length ? artifactRefs : undefined);
+        addAssistant(done.reply, artifactRefs.length ? artifactRefs : undefined, intelligence);
       } else {
         finalizeAssistant(
           assistantId,
           done.reply,
           artifactRefs.length ? artifactRefs : undefined,
+          intelligence,
         );
       }
     } catch (err) {
@@ -441,7 +492,7 @@ export default function App() {
   async function handleDownload(format: "html" | "docx" | "pdf") {
     if (!panelView) return;
     const payload = getExportPayload(
-      panelView,
+      panelView as ArtifactKey | "recommendations",
       recommendation,
       artifacts,
       docMeta,
@@ -569,7 +620,7 @@ export default function App() {
             )}
 
             <div className="thread">
-              {messages.map((msg) => (
+              {messages.map((msg, idx) => (
                 <ThreadMessage
                   key={msg.id}
                   message={msg}
@@ -603,11 +654,14 @@ export default function App() {
           title={
             panelView === "recommendations"
               ? `${vehicleCode ?? "Vehicle"} recommendation`
-              : currentArtifact?.title ?? ARTIFACT_LABELS[panelView]
+              : panelView === "order"
+                ? "Sales Order & Commercial Specification"
+                : currentArtifact?.title ?? ARTIFACT_LABELS[panelView as ArtifactKey]
           }
           busy={busy}
           recommendation={recommendation}
           configurationCards={configurationCards}
+          orderDocument={orderDocument}
           currentArtifact={currentArtifact}
           docMeta={docMeta}
           orderSubmitted={orderSubmitted}
@@ -857,6 +911,7 @@ function Composer({
   );
 }
 
+
 function ThreadMessage({
   message,
   busy,
@@ -885,6 +940,8 @@ function ThreadMessage({
     );
   }
 
+  const isLatest = !message.streaming && message.role === "assistant";
+
   return (
     <div className="msg msg-assistant">
       <div
@@ -894,6 +951,133 @@ function ThreadMessage({
         }}
       />
       {message.streaming && <span className="stream-cursor" aria-hidden />}
+      
+      {/* Intelligence Display - Conflicts */}
+      {!message.streaming && message.conflicts && message.conflicts.length > 0 && (
+        <div className="intelligence-panel conflicts-panel">
+          <div className="panel-header">
+            <span className="panel-icon">⚠️</span>
+            <h4>Conflicts Detected</h4>
+          </div>
+          {message.conflicts.map((conflict, i) => (
+            <div key={i} className={`conflict-card severity-${conflict.severity.toLowerCase()}`}>
+              <div className="conflict-header">
+                <span className="conflict-type">{conflict.type}</span>
+                <span className="conflict-severity">{conflict.severity}</span>
+              </div>
+              <p className="conflict-message">{conflict.message}</p>
+              <p className="conflict-explanation">{conflict.explanation}</p>
+              <div className="conflict-options">
+                <strong>Options:</strong>
+                <ol>
+                  {conflict.options.map((opt, j) => (
+                    <li key={j}>{opt}</li>
+                  ))}
+                </ol>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Intelligence Display - Suggestions */}
+      {!message.streaming && message.suggestions && message.suggestions.length > 0 && (
+        <div className="intelligence-panel suggestions-panel">
+          <div className="panel-header">
+            <span className="panel-icon">💡</span>
+            <h4>Proactive Suggestions</h4>
+          </div>
+          {message.suggestions.map((sug, i) => (
+            <div key={i} className="suggestion-card">
+              <span className="suggestion-category">{sug.category.replace(/_/g, ' ')}</span>
+              <p className="suggestion-message">{sug.message}</p>
+              <p className="suggestion-rationale">{sug.rationale}</p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Intelligence Display - Vehicle Preview */}
+      {!message.streaming && message.vehicle_preview && (
+        <div className="intelligence-panel vehicle-preview-panel">
+          <div className="panel-header">
+            <span className="panel-icon">🎯</span>
+            <h4>Vehicle Match</h4>
+          </div>
+          <div className="vehicle-preview-card">
+            <div className="vehicle-header">
+              <span className="vehicle-code">{message.vehicle_preview.model_code}</span>
+              <span className="vehicle-score">
+                {Math.round(message.vehicle_preview.score * 100)}% match
+              </span>
+            </div>
+            <p className="vehicle-fit">{message.vehicle_preview.fit_summary}</p>
+            {message.vehicle_preview.proactive_gaps && message.vehicle_preview.proactive_gaps.length > 0 ? (
+              <div className="vehicle-gaps proactive">
+                <strong>Proactive questions:</strong>
+                {message.vehicle_preview.proactive_gaps.map((pg, i) => (
+                  <div key={i} className={`proactive-gap priority-${pg.priority.toLowerCase()}`}>
+                    <div className="proactive-gap-header">
+                      <span className="proactive-gap-field">{pg.label}</span>
+                      <span className={`proactive-gap-priority ${pg.priority.toLowerCase()}`}>{pg.priority}</span>
+                      <span className="proactive-gap-source">{pg.source.replace(/_/g, ' ')}</span>
+                    </div>
+                    <p className="proactive-gap-question">{pg.question}</p>
+                    <details className="proactive-gap-rationale">
+                      <summary>Why this matters</summary>
+                      <p>{pg.rationale}</p>
+                    </details>
+                  </div>
+                ))}
+              </div>
+            ) : message.vehicle_preview.gaps.length > 0 && (
+              <div className="vehicle-gaps">
+                <strong>Still needed:</strong>
+                <ul>
+                  {message.vehicle_preview.gaps.map((gap, i) => (
+                    <li key={i}>{gap}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {message.vehicle_preview.estimated_price_usd && (
+              <p className="vehicle-price">
+                Est. ${(message.vehicle_preview.estimated_price_usd / 1000000).toFixed(2)}M per unit
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+      
+      {/* Intelligence Display - Threat Intelligence Briefs */}
+      {!message.streaming && message.intelligence_briefs && message.intelligence_briefs.length > 0 && (
+        <div className="intelligence-panel intel-briefs-panel">
+          <div className="panel-header">
+            <span className="panel-icon">🌐</span>
+            <h4>Threat Intelligence</h4>
+          </div>
+          {message.intelligence_briefs.map((brief, i) => (
+            <div key={i} className="intel-brief-card">
+              <div className="brief-query">{brief.query}</div>
+              <p className="brief-summary">{brief.summary}</p>
+              {brief.results.length > 0 && (
+                <details className="brief-sources">
+                  <summary>Sources ({brief.results.length})</summary>
+                  <ul>
+                    {brief.results.map((r, j) => (
+                      <li key={j} className={`brief-source relevance-${r.relevance.toLowerCase()}`}>
+                        <a href={r.url} target="_blank" rel="noopener noreferrer">{r.title}</a>
+                        <p>{r.snippet}</p>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
       {message.artifacts?.map((ref) => (
         <button
           key={ref.id}
@@ -910,7 +1094,7 @@ function ThreadMessage({
           </span>
         </button>
       ))}
-      <div className="msg-actions" aria-hidden>
+      <div className={`msg-actions${isLatest ? "" : " msg-actions-hidden"}`} aria-hidden>
         <button type="button" title="Copy">
           ⧉
         </button>
@@ -1006,6 +1190,7 @@ function ArtifactPanel({
   busy,
   recommendation,
   configurationCards,
+  orderDocument,
   currentArtifact,
   docMeta,
   orderSubmitted,
@@ -1022,6 +1207,7 @@ function ArtifactPanel({
   busy: WorkflowStep | null;
   recommendation: Recommendation | null;
   configurationCards: PastOrderRecommendation[];
+  orderDocument: string | null;
   currentArtifact: Artifact | null;
   docMeta: { orderId: string; clientLabel: string; vehicleCode?: string };
   orderSubmitted: boolean;
@@ -1117,6 +1303,10 @@ function ArtifactPanel({
               ))}
             </div>
           </div>
+        ) : view === "order" && orderDocument ? (
+          <article className="paper-document order-doc">
+            <pre className="order-doc-md">{orderDocument}</pre>
+          </article>
         ) : currentArtifact ? (
           <ArtifactDocument
             kind={currentArtifact.kind}

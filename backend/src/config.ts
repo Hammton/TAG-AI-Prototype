@@ -25,6 +25,8 @@ const envSchema = z.object({
     .url()
     .default("https://openrouter.ai/api/v1"),
   AGENT_MAX_TOOL_ITERATIONS: z.coerce.number().default(5),
+  TAVILY_API_KEY: z.string().optional(),
+  EXA_API_KEY: z.string().optional(),
 });
 
 export type Env = z.infer<typeof envSchema>;

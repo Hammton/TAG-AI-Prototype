@@ -15,6 +15,53 @@ export type AgentActivityEvent =
       recommendation?: unknown;
       artifact_kind?: "spec" | "quote" | "engineering";
       artifact_result?: unknown;
+      /** Present when Stage-1 intake dialogue is in progress */
+      intake_document?: string;
+      order_document?: string;
+      intelligence_briefs?: Array<{
+        query: string;
+        summary: string;
+        results: Array<{ source: string; title: string; snippet: string; url: string; relevance: "HIGH" | "MEDIUM" | "LOW" }>;
+        retrieved_at: string;
+      }>;
+      /** Present when Stage-1 intake dialogue includes conflict detection */
+      conflicts?: Array<{
+        type: "CONFLICT" | "WARNING" | "SUGGESTION";
+        severity: "HIGH" | "MEDIUM" | "LOW";
+        message: string;
+        fields: string[];
+        options: string[];
+        explanation: string;
+        tradeoffs?: Array<{
+          option: string;
+          impact: { weight_kg?: number; cost_usd?: number; timeline_months?: number };
+          pros: string[];
+          cons: string[];
+          feasibility: "STANDARD" | "ENGINEERED" | "R&D";
+        }>;
+      }>;
+      suggestions?: Array<{
+        category: "CUSTOMER_PATTERN" | "THREAT_IMPLICATION" | "ORDER_SIZE" | "TECH_TRANSFER";
+        message: string;
+        rationale: string;
+      }>;
+      vehicle_preview?: {
+        vehicle_model_id: string;
+        model_code: string;
+        type: string;
+        score: number;
+        fit_summary: string;
+        gaps: string[];
+        proactive_gaps?: Array<{
+          field: string;
+          label: string;
+          question: string;
+          rationale: string;
+          priority: "HIGH" | "MEDIUM" | "LOW";
+          source: "PATTERN_MATCH" | "ROLE_CROSS_REFERENCE" | "CONTRADICTION" | "EXTERNAL_INTELLIGENCE";
+        }>;
+        estimated_price_usd: number | null;
+      };
       engine: "langchain" | "stub";
       record_id?: string | null;
     }

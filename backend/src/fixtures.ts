@@ -157,3 +157,5 @@ export const cadMetadata = {
   width_mm: 2100,
   height_mm: 1980,
 };
+
+export const defaultEngagementRef = 'AVP-2026-POC';

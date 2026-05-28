@@ -111,4 +111,66 @@ export const memoryStore: DataStore = {
   async getOrder(order_id) {
     return pastOrders.find((o) => o.order_id === order_id) ?? null;
   },
+
+  async listVehicleClasses() {
+    return [
+      { id: "CIT", code: "CIT", label: "Cash-in-Transit" },
+      { id: "APC", code: "APC", label: "Armoured Personnel Carrier" },
+      { id: "PPV", code: "PPV", label: "Passenger Protection Vehicle" },
+      { id: "MILITARY", code: "MILITARY", label: "Military Tactical" },
+      { id: "LE", code: "LE", label: "Law Enforcement" },
+    ];
+  },
+
+  async listEngagements() {
+    return [];
+  },
+
+  async getEngagement() {
+    return null;
+  },
+
+  async createEngagement(input) {
+    return { id: `eng-${Date.now()}`, reference: input.reference };
+  },
+
+  async createOrUpdateEngagementRequirements(input) {
+    return input.requirements.length;
+  },
+
+  async runRequirementMatch(input) {
+    const vehicle = vehicles[0];
+    return {
+      recommendation_id: `rec-${Date.now()}`,
+      candidates: [
+        {
+          vehicle_model_id: vehicle.id,
+          model_code: vehicle.model_code,
+          type: vehicle.type,
+          rank: 1,
+          match_score: 0.85,
+          match_tier: "CLOSE" as const,
+          matched_mandatory: 3,
+          total_mandatory: 4,
+          matched_desired: 2,
+          total_desired: 3,
+          gaps: [],
+          summary: "Memory-store mock recommendation",
+        },
+      ],
+    };
+  },
+
+  async createSalesOrderFromEngagement(input) {
+    return { sales_order_ref: input.sales_order_ref };
+  },
+
+  async buildStage3SpecSections() {
+    return { specification_id: `spec-${Date.now()}`, sections_created: 1 };
+  },
+
+  async persistSpecTraceability() {
+    return { linked_requirements: 1 };
+  },
+
 };
